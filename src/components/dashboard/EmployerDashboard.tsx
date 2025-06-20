@@ -11,6 +11,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Checkbox } from '@/components/ui/checkbox';
 import { toast } from '@/hooks/use-toast';
 import { User } from '@supabase/supabase-js';
+import { Trash2 } from 'lucide-react';
 
 const SKILLS_LIST = [
   'Data Entry', 'Customer Service', 'Content Writing', 'Graphic Design',
@@ -33,6 +34,7 @@ interface Job {
   contact_email: string;
   whatsapp_number: string;
   status: string;
+  created_at: string;
 }
 
 interface Student {
@@ -40,6 +42,19 @@ interface Student {
   full_name: string;
   phone_number: string;
   matching_skills_count: number;
+}
+
+interface JobRequest {
+  id: string;
+  job_id: string;
+  student_id: string;
+  message: string;
+  status: string;
+  created_at: string;
+  profiles: {
+    full_name: string;
+    phone_number: string;
+  };
 }
 
 interface EmployerDashboardProps {
@@ -50,7 +65,8 @@ interface EmployerDashboardProps {
 const EmployerDashboard: React.FC<EmployerDashboardProps> = ({ user, onSignOut }) => {
   const [jobs, setJobs] = useState<Job[]>([]);
   const [matchingStudents, setMatchingStudents] = useState<Student[]>([]);
-  const [activeTab, setActiveTab] = useState<'jobs' | 'candidates'>('jobs');
+  const [jobRequests, setJobRequests] = useState<JobRequest[]>([]);
+  const [activeTab, setActiveTab] = useState<'jobs' | 'candidates' | 'requests'>('jobs');
   const [isLoading, setIsLoading] = useState(true);
   const [showJobDialog, setShowJobDialog] = useState(false);
   const [selectedJobForCandidates, setSelectedJobForCandidates] = useState<string | null>(null);
@@ -69,15 +85,18 @@ const EmployerDashboard: React.FC<EmployerDashboardProps> = ({ user, onSignOut }
 
   useEffect(() => {
     fetchJobs();
+    fetchJobRequests();
   }, []);
 
   const fetchJobs = async () => {
     const { data, error } = await supabase
       .from('jobs')
       .select('*')
-      .eq('employer_id', user.id);
+      .eq('employer_id', user.id)
+      .order('created_at', { ascending: false });
 
     if (error) {
+      console.error('Error fetching jobs:', error);
       toast({
         title: "Error",
         description: "Failed to fetch jobs",
@@ -89,11 +108,30 @@ const EmployerDashboard: React.FC<EmployerDashboardProps> = ({ user, onSignOut }
     setIsLoading(false);
   };
 
+  const fetchJobRequests = async () => {
+    const { data, error } = await supabase
+      .from('job_requests')
+      .select(`
+        *,
+        profiles!inner(full_name, phone_number),
+        jobs!inner(title)
+      `)
+      .eq('jobs.employer_id', user.id)
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.error('Error fetching job requests:', error);
+    } else {
+      setJobRequests(data || []);
+    }
+  };
+
   const fetchMatchingStudents = async (jobId: string) => {
     const { data, error } = await supabase
       .rpc('get_matching_students', { job_uuid: jobId });
 
     if (error) {
+      console.error('Error fetching matching students:', error);
       toast({
         title: "Error",
         description: "Failed to fetch matching students",
@@ -182,6 +220,40 @@ const EmployerDashboard: React.FC<EmployerDashboardProps> = ({ user, onSignOut }
     fetchJobs();
   };
 
+  const handleDeleteJob = async (jobId: string) => {
+    if (!confirm('Are you sure you want to delete this job? This action cannot be undone.')) {
+      return;
+    }
+
+    // First delete related job_skills
+    await supabase
+      .from('job_skills')
+      .delete()
+      .eq('job_id', jobId);
+
+    // Then delete the job
+    const { error } = await supabase
+      .from('jobs')
+      .delete()
+      .eq('id', jobId)
+      .eq('employer_id', user.id);
+
+    if (error) {
+      console.error('Error deleting job:', error);
+      toast({
+        title: "Error",
+        description: "Failed to delete job",
+        variant: "destructive"
+      });
+    } else {
+      toast({
+        title: "Success",
+        description: "Job deleted successfully"
+      });
+      fetchJobs();
+    }
+  };
+
   const handleSkillToggle = (skill: string) => {
     setJobForm(prev => ({
       ...prev,
@@ -213,6 +285,29 @@ const EmployerDashboard: React.FC<EmployerDashboardProps> = ({ user, onSignOut }
         title: "Success",
         description: "Job request sent to student!"
       });
+      fetchJobRequests();
+    }
+  };
+
+  const handleRequestResponse = async (requestId: string, status: 'accepted' | 'rejected') => {
+    const { error } = await supabase
+      .from('job_requests')
+      .update({ status })
+      .eq('id', requestId);
+
+    if (error) {
+      console.error('Error updating request:', error);
+      toast({
+        title: "Error",
+        description: "Failed to update request",
+        variant: "destructive"
+      });
+    } else {
+      toast({
+        title: "Success",
+        description: `Request ${status} successfully`
+      });
+      fetchJobRequests();
     }
   };
 
@@ -249,7 +344,13 @@ const EmployerDashboard: React.FC<EmployerDashboardProps> = ({ user, onSignOut }
             variant={activeTab === 'jobs' ? 'default' : 'outline'}
             onClick={() => setActiveTab('jobs')}
           >
-            My Jobs
+            My Jobs ({jobs.length})
+          </Button>
+          <Button 
+            variant={activeTab === 'requests' ? 'default' : 'outline'}
+            onClick={() => setActiveTab('requests')}
+          >
+            Applications ({jobRequests.length})
           </Button>
           <Button 
             variant={activeTab === 'candidates' ? 'default' : 'outline'}
@@ -400,12 +501,72 @@ const EmployerDashboard: React.FC<EmployerDashboardProps> = ({ user, onSignOut }
                   </CardHeader>
                   <CardContent>
                     <p className="text-sm mb-4">{job.description}</p>
-                    <Button 
-                      onClick={() => fetchMatchingStudents(job.id)}
-                      size="sm"
-                    >
-                      View Matching Candidates
-                    </Button>
+                    <div className="flex gap-2">
+                      <Button 
+                        onClick={() => fetchMatchingStudents(job.id)}
+                        size="sm"
+                      >
+                        View Matching Candidates
+                      </Button>
+                      <Button 
+                        onClick={() => handleDeleteJob(job.id)}
+                        size="sm"
+                        variant="destructive"
+                      >
+                        <Trash2 className="w-4 h-4 mr-1" />
+                        Delete Job
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))
+            )}
+          </div>
+        ) : activeTab === 'requests' ? (
+          <div>
+            <h2 className="text-2xl font-bold mb-6">Job Applications</h2>
+            {jobRequests.length === 0 ? (
+              <Card>
+                <CardContent className="text-center py-8">
+                  <p className="text-gray-500">No applications received yet</p>
+                </CardContent>
+              </Card>
+            ) : (
+              jobRequests.map((request) => (
+                <Card key={request.id} className="mb-4">
+                  <CardContent className="pt-6">
+                    <div className="flex justify-between items-start">
+                      <div className="flex-1">
+                        <h3 className="font-semibold">{request.profiles.full_name}</h3>
+                        <p className="text-sm text-gray-600">Phone: {request.profiles.phone_number}</p>
+                        <p className="text-sm text-gray-600 mt-1">Applied on: {new Date(request.created_at).toLocaleDateString()}</p>
+                        <p className="text-sm mt-2"><strong>Message:</strong> {request.message}</p>
+                        <Badge 
+                          variant={request.status === 'accepted' ? 'default' : 
+                                  request.status === 'rejected' ? 'destructive' : 'secondary'}
+                          className="mt-2"
+                        >
+                          {request.status}
+                        </Badge>
+                      </div>
+                      {request.status === 'pending' && (
+                        <div className="flex gap-2">
+                          <Button 
+                            onClick={() => handleRequestResponse(request.id, 'accepted')}
+                            size="sm"
+                          >
+                            Accept
+                          </Button>
+                          <Button 
+                            onClick={() => handleRequestResponse(request.id, 'rejected')}
+                            size="sm"
+                            variant="destructive"
+                          >
+                            Reject
+                          </Button>
+                        </div>
+                      )}
+                    </div>
                   </CardContent>
                 </Card>
               ))

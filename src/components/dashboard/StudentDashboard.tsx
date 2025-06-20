@@ -51,9 +51,14 @@ const StudentDashboard: React.FC<StudentDashboardProps> = ({ user, onSignOut }) 
 
   useEffect(() => {
     fetchStudentSkills();
-    fetchJobs();
     fetchJobRequests();
   }, []);
+
+  useEffect(() => {
+    if (studentSkills.length > 0) {
+      fetchJobs();
+    }
+  }, [studentSkills]);
 
   const fetchStudentSkills = async () => {
     console.log('Fetching student skills for user:', user.id);
@@ -76,14 +81,20 @@ const StudentDashboard: React.FC<StudentDashboardProps> = ({ user, onSignOut }) 
   };
 
   const fetchJobs = async () => {
-    console.log('Fetching jobs...');
+    if (studentSkills.length === 0) {
+      setJobs([]);
+      setIsLoading(false);
+      return;
+    }
+
+    console.log('Fetching jobs with skill matching...');
     const { data, error } = await supabase
       .from('jobs')
       .select(`
         *,
         employer_profiles!inner(business_name),
-        job_skills(
-          skills(name)
+        job_skills!inner(
+          skills!inner(name)
         )
       `)
       .eq('status', 'active');
@@ -95,31 +106,31 @@ const StudentDashboard: React.FC<StudentDashboardProps> = ({ user, onSignOut }) 
         description: "Failed to fetch jobs",
         variant: "destructive"
       });
-    } else {
-      console.log('Fetched jobs:', data);
-      
-      // Filter jobs based on skill matching using AI logic
-      const matchedJobs = data?.filter(job => {
-        if (studentSkills.length === 0) return true; // Show all jobs if no skills set
-        
-        const jobSkills = job.job_skills?.map(js => js.skills?.name).filter(Boolean) || [];
-        console.log('Job skills for', job.title, ':', jobSkills);
-        
-        // AI matching: show job if student has at least one matching skill
-        const hasMatchingSkill = jobSkills.some(jobSkill => 
-          studentSkills.some(studentSkill => 
-            studentSkill.toLowerCase().includes(jobSkill.toLowerCase()) ||
-            jobSkill.toLowerCase().includes(studentSkill.toLowerCase())
-          )
-        );
-        
-        console.log('Job', job.title, 'matches skills:', hasMatchingSkill);
-        return hasMatchingSkill || jobSkills.length === 0; // Show jobs with no specific skills too
-      }) || [];
-      
-      console.log('Matched jobs:', matchedJobs);
-      setJobs(matchedJobs);
+      setIsLoading(false);
+      return;
     }
+
+    console.log('Raw jobs data:', data);
+    
+    // Filter jobs to only show those with matching skills
+    const matchedJobs = data?.filter(job => {
+      const jobSkills = job.job_skills?.map(js => js.skills?.name).filter(Boolean) || [];
+      console.log('Job skills for', job.title, ':', jobSkills);
+      
+      // Only show jobs if student has at least one matching skill
+      const hasMatchingSkill = jobSkills.some(jobSkill => 
+        studentSkills.some(studentSkill => 
+          studentSkill.toLowerCase().includes(jobSkill.toLowerCase()) ||
+          jobSkill.toLowerCase().includes(studentSkill.toLowerCase())
+        )
+      );
+      
+      console.log('Job', job.title, 'matches skills:', hasMatchingSkill);
+      return hasMatchingSkill;
+    }) || [];
+    
+    console.log('Final matched jobs:', matchedJobs);
+    setJobs(matchedJobs);
     setIsLoading(false);
   };
 
@@ -134,7 +145,8 @@ const StudentDashboard: React.FC<StudentDashboardProps> = ({ user, onSignOut }) 
           employer_profiles(business_name)
         )
       `)
-      .eq('student_id', user.id);
+      .eq('student_id', user.id)
+      .order('created_at', { ascending: false });
 
     if (error) {
       console.error('Error fetching job requests:', error);
@@ -146,13 +158,25 @@ const StudentDashboard: React.FC<StudentDashboardProps> = ({ user, onSignOut }) 
 
   const handleApplyJob = async (jobId: string) => {
     console.log('Applying for job:', jobId);
+    
+    // Check if already applied
+    const existingRequest = jobRequests.find(req => req.job_id === jobId);
+    if (existingRequest) {
+      toast({
+        title: "Info",
+        description: "You have already applied for this job",
+        variant: "default"
+      });
+      return;
+    }
+
     const { error } = await supabase
       .from('job_requests')
       .insert({
         job_id: jobId,
         student_id: user.id,
         status: 'pending',
-        message: 'I am interested in this position and would like to apply.'
+        message: 'I am interested in this position and would like to apply. I believe my skills match the job requirements.'
       });
 
     if (error) {
@@ -165,7 +189,7 @@ const StudentDashboard: React.FC<StudentDashboardProps> = ({ user, onSignOut }) 
     } else {
       toast({
         title: "Success",
-        description: "Your application has been sent!"
+        description: "Your application has been sent! Check your inbox for updates."
       });
       fetchJobRequests();
     }
@@ -179,6 +203,8 @@ const StudentDashboard: React.FC<StudentDashboardProps> = ({ user, onSignOut }) 
         jobSkill.toLowerCase().includes(studentSkill.toLowerCase())
       )
     );
+
+    const hasApplied = jobRequests.some(req => req.job_id === job.id);
 
     return (
       <Card key={job.id} className="mb-4">
@@ -222,18 +248,18 @@ const StudentDashboard: React.FC<StudentDashboardProps> = ({ user, onSignOut }) 
             </div>
           )}
           
-          {matchingSkills.length > 0 && (
-            <p className="text-sm text-green-600 mb-3">
-              🎯 You match {matchingSkills.length} of {jobSkills.length} required skills!
-            </p>
-          )}
+          <p className="text-sm text-green-600 mb-3">
+            🎯 You match {matchingSkills.length} of {jobSkills.length} required skills!
+          </p>
           
           <div className="flex gap-2 flex-wrap">
             <Button 
               onClick={() => handleApplyJob(job.id)}
               size="sm"
+              disabled={hasApplied}
+              variant={hasApplied ? "secondary" : "default"}
             >
-              Apply Now
+              {hasApplied ? "Applied" : "Apply Now"}
             </Button>
             {job.whatsapp_number && (
               <Button 
@@ -285,7 +311,7 @@ const StudentDashboard: React.FC<StudentDashboardProps> = ({ user, onSignOut }) 
               </div>
             </CardHeader>
             <CardContent>
-              <p className="text-sm mb-2">Message: {request.message}</p>
+              <p className="text-sm mb-2"><strong>Your message:</strong> {request.message}</p>
               <p className="text-xs text-gray-500">
                 Applied on: {new Date(request.created_at).toLocaleDateString()}
               </p>
@@ -353,7 +379,7 @@ const StudentDashboard: React.FC<StudentDashboardProps> = ({ user, onSignOut }) 
             variant={activeTab === 'browse' ? 'default' : 'outline'}
             onClick={() => setActiveTab('browse')}
           >
-            Browse Jobs {studentSkills.length > 0 && `(AI Matched)`}
+            Browse Jobs {studentSkills.length > 0 && `(Skill Matched)`}
           </Button>
           <Button 
             variant={activeTab === 'inbox' ? 'default' : 'outline'}
@@ -367,7 +393,7 @@ const StudentDashboard: React.FC<StudentDashboardProps> = ({ user, onSignOut }) 
           <div>
             <div className="flex justify-between items-center mb-6">
               <h2 className="text-2xl font-bold">
-                {studentSkills.length > 0 ? 'Jobs Matching Your Skills' : 'Available Jobs'}
+                {studentSkills.length > 0 ? 'Jobs Matching Your Skills' : 'Set up your skills to see matching jobs'}
               </h2>
               {studentSkills.length > 0 && (
                 <div className="text-sm text-gray-600">
@@ -375,13 +401,22 @@ const StudentDashboard: React.FC<StudentDashboardProps> = ({ user, onSignOut }) 
                 </div>
               )}
             </div>
-            {jobs.length === 0 ? (
+            {studentSkills.length === 0 ? (
               <Card>
                 <CardContent className="text-center py-8">
                   <p className="text-gray-500">
-                    {studentSkills.length > 0 
-                      ? "No jobs match your current skills. New opportunities are added regularly!"
-                      : "No jobs available at the moment"}
+                    Please set up your skills in your profile to see matching job opportunities.
+                  </p>
+                </CardContent>
+              </Card>
+            ) : jobs.length === 0 ? (
+              <Card>
+                <CardContent className="text-center py-8">
+                  <p className="text-gray-500">
+                    No jobs match your current skills. New opportunities are added regularly!
+                  </p>
+                  <p className="text-sm text-gray-400 mt-2">
+                    Your skills: {studentSkills.join(', ')}
                   </p>
                 </CardContent>
               </Card>
