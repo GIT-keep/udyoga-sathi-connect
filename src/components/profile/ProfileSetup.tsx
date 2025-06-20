@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
@@ -30,40 +29,39 @@ interface ProfileSetupProps {
 
 const ProfileSetup: React.FC<ProfileSetupProps> = ({ user, userType, onComplete }) => {
   const [currentStep, setCurrentStep] = useState(1);
-  const [isLoading, setIsLoading] = useState(false);
-  const [selectedSkills, setSelectedSkills] = useState<string[]>([]);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   
-  const [profileData, setProfileData] = useState({
+  const [formData, setFormData] = useState({
     fullName: '',
     age: '',
     phoneNumber: '',
     aadhaarCard: '',
-    // Student specific
     address: '',
     collegeId: '',
     jobAvailabilityHours: '',
-    // Employer specific
     businessName: '',
     businessAddress: '',
-    jobTypeProvided: ''
+    jobTypeProvided: '',
+    selectedSkills: [] as string[]
   });
 
   const totalSteps = userType === 'student' ? 3 : 2;
   const progress = (currentStep / totalSteps) * 100;
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-    setProfileData(prev => ({
+    setFormData(prev => ({
       ...prev,
       [e.target.name]: e.target.value
     }));
   };
 
   const handleSkillToggle = (skill: string) => {
-    setSelectedSkills(prev => 
-      prev.includes(skill) 
-        ? prev.filter(s => s !== skill)
-        : [...prev, skill]
-    );
+    setFormData(prev => ({
+      ...prev,
+      selectedSkills: prev.selectedSkills.includes(skill) 
+        ? prev.selectedSkills.filter(s => s !== skill)
+        : [...prev.selectedSkills, skill]
+    }));
   };
 
   const handleNext = () => {
@@ -79,45 +77,48 @@ const ProfileSetup: React.FC<ProfileSetupProps> = ({ user, userType, onComplete 
   };
 
   const handleSubmit = async () => {
-    setIsLoading(true);
-
+    setIsSubmitting(true);
+    
     try {
-      // Insert into profiles table
+      // First create the main profile
       const { error: profileError } = await supabase
         .from('profiles')
         .insert({
           id: user.id,
-          full_name: profileData.fullName,
-          age: parseInt(profileData.age),
-          phone_number: profileData.phoneNumber,
-          aadhaar_card: profileData.aadhaarCard,
-          user_type: userType
+          full_name: formData.fullName,
+          age: parseInt(formData.age),
+          phone_number: formData.phoneNumber,
+          aadhaar_card: formData.aadhaarCard,
+          user_type: userType as 'student' | 'employer'
         });
 
-      if (profileError) throw profileError;
+      if (profileError) {
+        console.error('Profile creation error:', profileError);
+        throw profileError;
+      }
 
       if (userType === 'student') {
-        // Insert into student_profiles table
+        // Create student profile
         const { error: studentError } = await supabase
           .from('student_profiles')
           .insert({
             id: user.id,
-            address: profileData.address,
-            college_id: profileData.collegeId,
-            job_availability_hours: profileData.jobAvailabilityHours
+            address: formData.address,
+            college_id: formData.collegeId,
+            job_availability_hours: formData.jobAvailabilityHours
           });
 
-        if (studentError) throw studentError;
+        if (studentError) {
+          console.error('Student profile creation error:', studentError);
+          throw studentError;
+        }
 
-        // Insert selected skills
-        if (selectedSkills.length > 0) {
-          // First get skill IDs
-          const { data: skillsData, error: skillsError } = await supabase
+        // Add skills
+        if (formData.selectedSkills.length > 0) {
+          const { data: skillsData } = await supabase
             .from('skills')
             .select('id, name')
-            .in('name', selectedSkills);
-
-          if (skillsError) throw skillsError;
+            .in('name', formData.selectedSkills);
 
           if (skillsData) {
             const studentSkills = skillsData.map(skill => ({
@@ -125,42 +126,49 @@ const ProfileSetup: React.FC<ProfileSetupProps> = ({ user, userType, onComplete 
               skill_id: skill.id
             }));
 
-            const { error: studentSkillsError } = await supabase
+            const { error: skillsError } = await supabase
               .from('student_skills')
               .insert(studentSkills);
 
-            if (studentSkillsError) throw studentSkillsError;
+            if (skillsError) {
+              console.error('Skills creation error:', skillsError);
+              throw skillsError;
+            }
           }
         }
       } else {
-        // Insert into employer_profiles table
+        // Create employer profile
         const { error: employerError } = await supabase
           .from('employer_profiles')
           .insert({
             id: user.id,
-            business_name: profileData.businessName,
-            business_address: profileData.businessAddress,
-            job_type_provided: profileData.jobTypeProvided
+            business_name: formData.businessName,
+            business_address: formData.businessAddress,
+            job_type_provided: formData.jobTypeProvided
           });
 
-        if (employerError) throw employerError;
+        if (employerError) {
+          console.error('Employer profile creation error:', employerError);
+          throw employerError;
+        }
       }
 
       toast({
-        title: "Profile Created Successfully!",
-        description: "Welcome to Udyoga Mitra"
+        title: "Success",
+        description: "Profile created successfully!"
       });
-
+      
       onComplete();
-    } catch (error: any) {
+    } catch (error) {
+      console.error('Error creating profile:', error);
       toast({
         title: "Error",
-        description: error.message,
+        description: "Failed to create profile. Please try again.",
         variant: "destructive"
       });
     }
-
-    setIsLoading(false);
+    
+    setIsSubmitting(false);
   };
 
   const renderStep = () => {
@@ -175,7 +183,7 @@ const ProfileSetup: React.FC<ProfileSetupProps> = ({ user, userType, onComplete 
                 <Input
                   id="fullName"
                   name="fullName"
-                  value={profileData.fullName}
+                  value={formData.fullName}
                   onChange={handleInputChange}
                   required
                 />
@@ -186,7 +194,7 @@ const ProfileSetup: React.FC<ProfileSetupProps> = ({ user, userType, onComplete 
                   id="age"
                   name="age"
                   type="number"
-                  value={profileData.age}
+                  value={formData.age}
                   onChange={handleInputChange}
                   required
                 />
@@ -196,7 +204,7 @@ const ProfileSetup: React.FC<ProfileSetupProps> = ({ user, userType, onComplete 
                 <Input
                   id="phoneNumber"
                   name="phoneNumber"
-                  value={profileData.phoneNumber}
+                  value={formData.phoneNumber}
                   onChange={handleInputChange}
                   required
                 />
@@ -206,7 +214,7 @@ const ProfileSetup: React.FC<ProfileSetupProps> = ({ user, userType, onComplete 
                 <Input
                   id="aadhaarCard"
                   name="aadhaarCard"
-                  value={profileData.aadhaarCard}
+                  value={formData.aadhaarCard}
                   onChange={handleInputChange}
                   required
                 />
@@ -225,7 +233,7 @@ const ProfileSetup: React.FC<ProfileSetupProps> = ({ user, userType, onComplete 
                 <Textarea
                   id="address"
                   name="address"
-                  value={profileData.address}
+                  value={formData.address}
                   onChange={handleInputChange}
                   required
                 />
@@ -236,7 +244,7 @@ const ProfileSetup: React.FC<ProfileSetupProps> = ({ user, userType, onComplete 
                   <Input
                     id="collegeId"
                     name="collegeId"
-                    value={profileData.collegeId}
+                    value={formData.collegeId}
                     onChange={handleInputChange}
                     required
                   />
@@ -247,7 +255,7 @@ const ProfileSetup: React.FC<ProfileSetupProps> = ({ user, userType, onComplete 
                     id="jobAvailabilityHours"
                     name="jobAvailabilityHours"
                     placeholder="e.g., Mon-Fri 6-10 PM"
-                    value={profileData.jobAvailabilityHours}
+                    value={formData.jobAvailabilityHours}
                     onChange={handleInputChange}
                     required
                   />
@@ -264,7 +272,7 @@ const ProfileSetup: React.FC<ProfileSetupProps> = ({ user, userType, onComplete 
                 <Input
                   id="businessName"
                   name="businessName"
-                  value={profileData.businessName}
+                  value={formData.businessName}
                   onChange={handleInputChange}
                   required
                 />
@@ -274,7 +282,7 @@ const ProfileSetup: React.FC<ProfileSetupProps> = ({ user, userType, onComplete 
                 <Textarea
                   id="businessAddress"
                   name="businessAddress"
-                  value={profileData.businessAddress}
+                  value={formData.businessAddress}
                   onChange={handleInputChange}
                   required
                 />
@@ -285,7 +293,7 @@ const ProfileSetup: React.FC<ProfileSetupProps> = ({ user, userType, onComplete 
                   id="jobTypeProvided"
                   name="jobTypeProvided"
                   placeholder="e.g., Data Entry, Customer Service"
-                  value={profileData.jobTypeProvided}
+                  value={formData.jobTypeProvided}
                   onChange={handleInputChange}
                   required
                 />
@@ -304,7 +312,7 @@ const ProfileSetup: React.FC<ProfileSetupProps> = ({ user, userType, onComplete 
                 <div key={skill} className="flex items-center space-x-2 p-2 rounded-lg hover:bg-gray-50">
                   <Checkbox
                     id={skill}
-                    checked={selectedSkills.includes(skill)}
+                    checked={formData.selectedSkills.includes(skill)}
                     onCheckedChange={() => handleSkillToggle(skill)}
                   />
                   <Label 
@@ -317,7 +325,7 @@ const ProfileSetup: React.FC<ProfileSetupProps> = ({ user, userType, onComplete 
               ))}
             </div>
             <p className="text-xs text-gray-500">
-              Selected: {selectedSkills.length} skills
+              Selected: {formData.selectedSkills.length} skills
             </p>
           </div>
         );
@@ -361,8 +369,8 @@ const ProfileSetup: React.FC<ProfileSetupProps> = ({ user, userType, onComplete 
                 Next
               </Button>
             ) : (
-              <Button onClick={handleSubmit} disabled={isLoading}>
-                {isLoading ? "Creating Profile..." : "Complete Setup"}
+              <Button onClick={handleSubmit} disabled={isSubmitting}>
+                {isSubmitting ? "Creating Profile..." : "Complete Setup"}
               </Button>
             )}
           </div>

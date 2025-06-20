@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
@@ -57,6 +56,7 @@ const StudentDashboard: React.FC<StudentDashboardProps> = ({ user, onSignOut }) 
       .eq('status', 'active');
 
     if (error) {
+      console.error('Error fetching jobs:', error);
       toast({
         title: "Error",
         description: "Failed to fetch jobs",
@@ -80,7 +80,12 @@ const StudentDashboard: React.FC<StudentDashboardProps> = ({ user, onSignOut }) 
     if (error) {
       console.error('Error fetching job requests:', error);
     } else {
-      setJobRequests(data || []);
+      // Transform the data to match our interface
+      const transformedData = (data || []).map(item => ({
+        ...item,
+        job: item.jobs
+      }));
+      setJobRequests(transformedData);
     }
   };
 

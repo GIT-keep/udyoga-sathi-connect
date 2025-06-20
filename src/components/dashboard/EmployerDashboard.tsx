@@ -60,7 +60,7 @@ const EmployerDashboard: React.FC<EmployerDashboardProps> = ({ user, onSignOut }
     description: '',
     hoursOfWork: '',
     payRate: '',
-    payType: 'hour',
+    payType: 'per_hour' as 'per_hour' | 'per_day',
     specificInstructions: '',
     contactEmail: '',
     whatsappNumber: '',
@@ -134,6 +134,7 @@ const EmployerDashboard: React.FC<EmployerDashboardProps> = ({ user, onSignOut }
       .single();
 
     if (jobError) {
+      console.error('Job creation error:', jobError);
       toast({
         title: "Error",
         description: "Failed to create job",
@@ -172,7 +173,7 @@ const EmployerDashboard: React.FC<EmployerDashboardProps> = ({ user, onSignOut }
       description: '',
       hoursOfWork: '',
       payRate: '',
-      payType: 'hour',
+      payType: 'per_hour',
       specificInstructions: '',
       contactEmail: '',
       whatsappNumber: '',
@@ -297,13 +298,13 @@ const EmployerDashboard: React.FC<EmployerDashboardProps> = ({ user, onSignOut }
                   </div>
                   <div>
                     <Label htmlFor="payType">Pay Type</Label>
-                    <Select value={jobForm.payType} onValueChange={(value) => setJobForm(prev => ({ ...prev, payType: value }))}>
+                    <Select value={jobForm.payType} onValueChange={(value: 'per_hour' | 'per_day') => setJobForm(prev => ({ ...prev, payType: value }))}>
                       <SelectTrigger>
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="hour">Per Hour</SelectItem>
-                        <SelectItem value="day">Per Day</SelectItem>
+                        <SelectItem value="per_hour">Per Hour</SelectItem>
+                        <SelectItem value="per_day">Per Day</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
@@ -389,7 +390,7 @@ const EmployerDashboard: React.FC<EmployerDashboardProps> = ({ user, onSignOut }
                       <CardTitle className="text-lg">{job.title}</CardTitle>
                       <div className="flex gap-2">
                         <Badge variant="outline">
-                          ₹{job.pay_rate}/{job.pay_type}
+                          ₹{job.pay_rate}/{job.pay_type === 'per_hour' ? 'hour' : 'day'}
                         </Badge>
                         <Badge variant={job.status === 'active' ? 'default' : 'secondary'}>
                           {job.status}
