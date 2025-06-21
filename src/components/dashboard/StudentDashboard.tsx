@@ -238,13 +238,6 @@ const StudentDashboard: React.FC<StudentDashboardProps> = ({ user, onSignOut }) 
   };
 
   const renderJobCard = (job: Job) => {
-    const jobSkills = job.job_skills?.map(js => js.skills?.name).filter(Boolean) || [];
-    const matchingSkills = jobSkills.filter(jobSkill => 
-      studentSkills.some(studentSkill => 
-        studentSkill.toLowerCase() === jobSkill.toLowerCase()
-      )
-    );
-
     const hasApplied = jobRequests.some(req => req.job_id === job.id);
 
     return (
@@ -267,30 +260,12 @@ const StudentDashboard: React.FC<StudentDashboardProps> = ({ user, onSignOut }) 
               <strong>Instructions:</strong> {job.specific_instructions}
             </p>
           )}
-          <p className="text-sm text-gray-600 mb-2">
+          <p className="text-sm text-gray-600 mb-3">
             <strong>Hours:</strong> {job.hours_of_work}
           </p>
           
-          {jobSkills.length > 0 && (
-            <div className="mb-3">
-              <p className="text-sm font-medium mb-1">Required Skills:</p>
-              <div className="flex flex-wrap gap-1">
-                {jobSkills.map((skill, index) => (
-                  <Badge 
-                    key={index} 
-                    variant={matchingSkills.includes(skill) ? "default" : "secondary"}
-                    className="text-xs"
-                  >
-                    {skill}
-                    {matchingSkills.includes(skill) && " ✓"}
-                  </Badge>
-                ))}
-              </div>
-            </div>
-          )}
-          
           <p className="text-sm text-green-600 mb-3">
-            🎯 You match {matchingSkills.length} of {jobSkills.length} required skills!
+            ✅ Your skills match this job's requirements!
           </p>
           
           <div className="flex gap-2 flex-wrap">
@@ -446,7 +421,7 @@ const StudentDashboard: React.FC<StudentDashboardProps> = ({ user, onSignOut }) 
             variant={activeTab === 'browse' ? 'default' : 'outline'}
             onClick={() => setActiveTab('browse')}
           >
-            Browse Jobs {studentSkills.length > 0 && `(Qualified)`}
+            Browse Jobs {studentSkills.length > 0 && `(Matched)`}
           </Button>
           <Button 
             variant={activeTab === 'inbox' ? 'default' : 'outline'}
@@ -460,13 +435,8 @@ const StudentDashboard: React.FC<StudentDashboardProps> = ({ user, onSignOut }) 
           <div>
             <div className="flex justify-between items-center mb-6">
               <h2 className="text-2xl font-bold">
-                {studentSkills.length > 0 ? 'Jobs You Are Qualified For' : 'Set up your skills to see matching jobs'}
+                {studentSkills.length > 0 ? 'Jobs Matching Your Skills' : 'Set up your skills to see matching jobs'}
               </h2>
-              {studentSkills.length > 0 && (
-                <div className="text-sm text-gray-600">
-                  Your skills: {studentSkills.join(', ')}
-                </div>
-              )}
             </div>
             {studentSkills.length === 0 ? (
               <Card>
@@ -481,9 +451,6 @@ const StudentDashboard: React.FC<StudentDashboardProps> = ({ user, onSignOut }) 
                 <CardContent className="text-center py-8">
                   <p className="text-gray-500">
                     No jobs match your current skills. New opportunities are added regularly!
-                  </p>
-                  <p className="text-sm text-gray-400 mt-2">
-                    Your skills: {studentSkills.join(', ')}
                   </p>
                 </CardContent>
               </Card>
