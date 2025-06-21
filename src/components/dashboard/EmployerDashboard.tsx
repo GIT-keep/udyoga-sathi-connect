@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
@@ -112,6 +113,19 @@ const EmployerDashboard: React.FC<EmployerDashboardProps> = ({ user, onSignOut }
   };
 
   const fetchJobRequests = async () => {
+    // First get all jobs for this employer
+    const { data: employerJobs } = await supabase
+      .from('jobs')
+      .select('id')
+      .eq('employer_id', user.id);
+
+    if (!employerJobs || employerJobs.length === 0) {
+      setJobRequests([]);
+      return;
+    }
+
+    const jobIds = employerJobs.map(job => job.id);
+
     const { data, error } = await supabase
       .from('job_requests')
       .select(`
@@ -119,7 +133,7 @@ const EmployerDashboard: React.FC<EmployerDashboardProps> = ({ user, onSignOut }
         profiles!inner(full_name, phone_number),
         jobs!inner(title)
       `)
-      .in('job_id', jobs.map(job => job.id))
+      .in('job_id', jobIds)
       .order('created_at', { ascending: false });
 
     if (error) {
@@ -278,6 +292,23 @@ const EmployerDashboard: React.FC<EmployerDashboardProps> = ({ user, onSignOut }
         title: "Error",
         description: "No job selected",
         variant: "destructive"
+      });
+      return;
+    }
+
+    // Check if request already exists
+    const { data: existingRequest } = await supabase
+      .from('job_requests')
+      .select('id')
+      .eq('job_id', selectedJobForCandidates)
+      .eq('student_id', studentId)
+      .single();
+
+    if (existingRequest) {
+      toast({
+        title: "Info",
+        description: "Job request already sent to this student",
+        variant: "default"
       });
       return;
     }
