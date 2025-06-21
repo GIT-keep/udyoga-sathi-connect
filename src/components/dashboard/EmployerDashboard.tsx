@@ -55,6 +55,9 @@ interface JobRequest {
     full_name: string;
     phone_number: string;
   };
+  jobs: {
+    title: string;
+  };
 }
 
 interface EmployerDashboardProps {
@@ -122,7 +125,13 @@ const EmployerDashboard: React.FC<EmployerDashboardProps> = ({ user, onSignOut }
     if (error) {
       console.error('Error fetching job requests:', error);
     } else {
-      setJobRequests(data || []);
+      // Transform the data to match our interface
+      const transformedData = data?.map(request => ({
+        ...request,
+        profiles: Array.isArray(request.profiles) ? request.profiles[0] : request.profiles,
+        jobs: Array.isArray(request.jobs) ? request.jobs[0] : request.jobs
+      })) || [];
+      setJobRequests(transformedData);
     }
   };
 
