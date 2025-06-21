@@ -193,6 +193,50 @@ const StudentDashboard: React.FC<StudentDashboardProps> = ({ user, onSignOut }) 
     }
   };
 
+  const handleAcceptJobRequest = async (requestId: string) => {
+    const { error } = await supabase
+      .from('job_requests')
+      .update({ status: 'accepted' })
+      .eq('id', requestId);
+
+    if (error) {
+      console.error('Error accepting job request:', error);
+      toast({
+        title: "Error",
+        description: "Failed to accept job request",
+        variant: "destructive"
+      });
+    } else {
+      toast({
+        title: "Success",
+        description: "Job request accepted! The recruiter will be notified."
+      });
+      fetchJobRequests();
+    }
+  };
+
+  const handleRejectJobRequest = async (requestId: string) => {
+    const { error } = await supabase
+      .from('job_requests')
+      .update({ status: 'rejected' })
+      .eq('id', requestId);
+
+    if (error) {
+      console.error('Error rejecting job request:', error);
+      toast({
+        title: "Error",
+        description: "Failed to reject job request",
+        variant: "destructive"
+      });
+    } else {
+      toast({
+        title: "Success",
+        description: "Job request rejected."
+      });
+      fetchJobRequests();
+    }
+  };
+
   const renderJobCard = (job: Job) => {
     const jobSkills = job.job_skills?.map(js => js.skills?.name).filter(Boolean) || [];
     const matchingSkills = jobSkills.filter(jobSkill => 
@@ -308,13 +352,33 @@ const StudentDashboard: React.FC<StudentDashboardProps> = ({ user, onSignOut }) 
               </div>
             </CardHeader>
             <CardContent>
-              <p className="text-sm mb-2"><strong>Your message:</strong> {request.message}</p>
-              <p className="text-xs text-gray-500">
-                Applied on: {new Date(request.created_at).toLocaleDateString()}
+              <p className="text-sm mb-2"><strong>Message:</strong> {request.message}</p>
+              <p className="text-xs text-gray-500 mb-3">
+                Received on: {new Date(request.created_at).toLocaleDateString()}
               </p>
+              
+              {request.status === 'pending' && (
+                <div className="flex gap-2 mb-3">
+                  <Button 
+                    onClick={() => handleAcceptJobRequest(request.id)}
+                    size="sm"
+                    variant="default"
+                  >
+                    Accept Job Request
+                  </Button>
+                  <Button 
+                    onClick={() => handleRejectJobRequest(request.id)}
+                    size="sm"
+                    variant="destructive"
+                  >
+                    Reject
+                  </Button>
+                </div>
+              )}
+              
               {request.status === 'accepted' && request.jobs && (
                 <div className="mt-3 p-3 bg-green-50 rounded-lg">
-                  <p className="text-sm text-green-800 font-medium">🎉 Congratulations! Your application was accepted.</p>
+                  <p className="text-sm text-green-800 font-medium">🎉 You accepted this job request!</p>
                   <div className="flex gap-2 mt-2">
                     {request.jobs.whatsapp_number && (
                       <Button 
@@ -334,6 +398,12 @@ const StudentDashboard: React.FC<StudentDashboardProps> = ({ user, onSignOut }) 
                       </Button>
                     )}
                   </div>
+                </div>
+              )}
+              
+              {request.status === 'rejected' && (
+                <div className="mt-3 p-3 bg-red-50 rounded-lg">
+                  <p className="text-sm text-red-800">You rejected this job request.</p>
                 </div>
               )}
             </CardContent>
@@ -423,7 +493,7 @@ const StudentDashboard: React.FC<StudentDashboardProps> = ({ user, onSignOut }) 
           </div>
         ) : (
           <div>
-            <h2 className="text-2xl font-bold mb-6">Your Applications</h2>
+            <h2 className="text-2xl font-bold mb-6">Your Job Requests</h2>
             {renderInbox()}
           </div>
         )}

@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
@@ -14,6 +13,7 @@ import { toast } from '@/hooks/use-toast';
 import { User } from '@supabase/supabase-js';
 import { Trash2 } from 'lucide-react';
 
+// ... keep existing code (SKILLS_LIST, interfaces)
 const SKILLS_LIST = [
   'Data Entry', 'Customer Service', 'Content Writing', 'Graphic Design',
   'Social Media Management', 'Event Management', 'Video Editing', 'Photography',
@@ -70,7 +70,7 @@ const EmployerDashboard: React.FC<EmployerDashboardProps> = ({ user, onSignOut }
   const [jobs, setJobs] = useState<Job[]>([]);
   const [matchingStudents, setMatchingStudents] = useState<Student[]>([]);
   const [jobRequests, setJobRequests] = useState<JobRequest[]>([]);
-  const [activeTab, setActiveTab] = useState<'jobs' | 'candidates' | 'requests'>('jobs');
+  const [activeTab, setActiveTab] = useState<'jobs' | 'candidates' | 'requests' | 'status'>('jobs');
   const [isLoading, setIsLoading] = useState(true);
   const [showJobDialog, setShowJobDialog] = useState(false);
   const [selectedJobForCandidates, setSelectedJobForCandidates] = useState<string | null>(null);
@@ -338,7 +338,7 @@ const EmployerDashboard: React.FC<EmployerDashboardProps> = ({ user, onSignOut }
     }
   };
 
-  const handleRequestResponse = async (requestId: string, status: 'accepted' | 'rejected') => {
+  const handleRequestStatusChange = async (requestId: string, status: 'accepted' | 'rejected') => {
     const { error } = await supabase
       .from('job_requests')
       .update({ status })
@@ -359,6 +359,68 @@ const EmployerDashboard: React.FC<EmployerDashboardProps> = ({ user, onSignOut }
       fetchJobRequests();
     }
   };
+
+  const renderStatusDashboard = () => (
+    <div>
+      <h2 className="text-2xl font-bold mb-6">Application Status Management</h2>
+      {jobRequests.length === 0 ? (
+        <Card>
+          <CardContent className="text-center py-8">
+            <p className="text-gray-500">No applications to manage</p>
+          </CardContent>
+        </Card>
+      ) : (
+        <div className="grid gap-4">
+          {jobRequests.map((request) => (
+            <Card key={request.id} className="border-l-4 border-l-blue-500">
+              <CardContent className="pt-6">
+                <div className="flex justify-between items-start">
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2 mb-2">
+                      <h3 className="font-semibold text-lg">{request.profiles.full_name}</h3>
+                      <Badge 
+                        variant={request.status === 'accepted' ? 'default' : 
+                                request.status === 'rejected' ? 'destructive' : 'secondary'}
+                      >
+                        {request.status.toUpperCase()}
+                      </Badge>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4 text-sm text-gray-600 mb-3">
+                      <div>
+                        <p><strong>Job:</strong> {request.jobs.title}</p>
+                        <p><strong>Phone:</strong> {request.profiles.phone_number}</p>
+                      </div>
+                      <div>
+                        <p><strong>Applied:</strong> {new Date(request.created_at).toLocaleDateString()}</p>
+                        <p><strong>Message:</strong> {request.message}</p>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex flex-col gap-2 ml-4">
+                    <Select 
+                      value={request.status} 
+                      onValueChange={(value: 'pending' | 'accepted' | 'rejected') => 
+                        handleRequestStatusChange(request.id, value as 'accepted' | 'rejected')
+                      }
+                    >
+                      <SelectTrigger className="w-32">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="pending">Pending</SelectItem>
+                        <SelectItem value="accepted">Accept</SelectItem>
+                        <SelectItem value="rejected">Reject</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
+    </div>
+  );
 
   if (isLoading) {
     return (
@@ -388,7 +450,7 @@ const EmployerDashboard: React.FC<EmployerDashboardProps> = ({ user, onSignOut }
       </header>
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="flex gap-4 mb-6">
+        <div className="flex gap-4 mb-6 flex-wrap">
           <Button 
             variant={activeTab === 'jobs' ? 'default' : 'outline'}
             onClick={() => setActiveTab('jobs')}
@@ -407,6 +469,12 @@ const EmployerDashboard: React.FC<EmployerDashboardProps> = ({ user, onSignOut }
             disabled={!selectedJobForCandidates}
           >
             Candidates ({matchingStudents.length})
+          </Button>
+          <Button 
+            variant={activeTab === 'status' ? 'default' : 'outline'}
+            onClick={() => setActiveTab('status')}
+          >
+            Status Dashboard
           </Button>
           <Dialog open={showJobDialog} onOpenChange={setShowJobDialog}>
             <DialogTrigger asChild>
@@ -602,13 +670,13 @@ const EmployerDashboard: React.FC<EmployerDashboardProps> = ({ user, onSignOut }
                       {request.status === 'pending' && (
                         <div className="flex gap-2">
                           <Button 
-                            onClick={() => handleRequestResponse(request.id, 'accepted')}
+                            onClick={() => handleRequestStatusChange(request.id, 'accepted')}
                             size="sm"
                           >
                             Accept
                           </Button>
                           <Button 
-                            onClick={() => handleRequestResponse(request.id, 'rejected')}
+                            onClick={() => handleRequestStatusChange(request.id, 'rejected')}
                             size="sm"
                             variant="destructive"
                           >
@@ -622,7 +690,7 @@ const EmployerDashboard: React.FC<EmployerDashboardProps> = ({ user, onSignOut }
               ))
             )}
           </div>
-        ) : (
+        ) : activeTab === 'candidates' ? (
           <div>
             <h2 className="text-2xl font-bold mb-6">Matching Candidates</h2>
             {matchingStudents.length === 0 ? (
@@ -655,6 +723,8 @@ const EmployerDashboard: React.FC<EmployerDashboardProps> = ({ user, onSignOut }
               ))
             )}
           </div>
+        ) : (
+          renderStatusDashboard()
         )}
       </div>
     </div>
