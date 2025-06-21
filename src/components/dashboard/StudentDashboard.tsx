@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
@@ -117,11 +116,10 @@ const StudentDashboard: React.FC<StudentDashboardProps> = ({ user, onSignOut }) 
       const jobSkills = job.job_skills?.map(js => js.skills?.name).filter(Boolean) || [];
       console.log('Job skills for', job.title, ':', jobSkills);
       
-      // Only show jobs if student has at least one matching skill
+      // Show jobs if student has at least one matching skill
       const hasMatchingSkill = jobSkills.some(jobSkill => 
         studentSkills.some(studentSkill => 
-          studentSkill.toLowerCase().includes(jobSkill.toLowerCase()) ||
-          jobSkill.toLowerCase().includes(studentSkill.toLowerCase())
+          studentSkill.toLowerCase() === jobSkill.toLowerCase()
         )
       );
       
@@ -199,8 +197,7 @@ const StudentDashboard: React.FC<StudentDashboardProps> = ({ user, onSignOut }) 
     const jobSkills = job.job_skills?.map(js => js.skills?.name).filter(Boolean) || [];
     const matchingSkills = jobSkills.filter(jobSkill => 
       studentSkills.some(studentSkill => 
-        studentSkill.toLowerCase().includes(jobSkill.toLowerCase()) ||
-        jobSkill.toLowerCase().includes(studentSkill.toLowerCase())
+        studentSkill.toLowerCase() === jobSkill.toLowerCase()
       )
     );
 
@@ -379,7 +376,7 @@ const StudentDashboard: React.FC<StudentDashboardProps> = ({ user, onSignOut }) 
             variant={activeTab === 'browse' ? 'default' : 'outline'}
             onClick={() => setActiveTab('browse')}
           >
-            Browse Jobs {studentSkills.length > 0 && `(Skill Matched)`}
+            Browse Jobs {studentSkills.length > 0 && `(Qualified)`}
           </Button>
           <Button 
             variant={activeTab === 'inbox' ? 'default' : 'outline'}
@@ -393,7 +390,7 @@ const StudentDashboard: React.FC<StudentDashboardProps> = ({ user, onSignOut }) 
           <div>
             <div className="flex justify-between items-center mb-6">
               <h2 className="text-2xl font-bold">
-                {studentSkills.length > 0 ? 'Jobs Matching Your Skills' : 'Set up your skills to see matching jobs'}
+                {studentSkills.length > 0 ? 'Jobs You Are Qualified For' : 'Set up your skills to see matching jobs'}
               </h2>
               {studentSkills.length > 0 && (
                 <div className="text-sm text-gray-600">

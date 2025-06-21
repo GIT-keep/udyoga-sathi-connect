@@ -119,7 +119,7 @@ const EmployerDashboard: React.FC<EmployerDashboardProps> = ({ user, onSignOut }
         profiles!inner(full_name, phone_number),
         jobs!inner(title)
       `)
-      .eq('jobs.employer_id', user.id)
+      .in('job_id', jobs.map(job => job.id))
       .order('created_at', { ascending: false });
 
     if (error) {
@@ -273,17 +273,26 @@ const EmployerDashboard: React.FC<EmployerDashboardProps> = ({ user, onSignOut }
   };
 
   const sendJobRequest = async (studentId: string) => {
+    if (!selectedJobForCandidates) {
+      toast({
+        title: "Error",
+        description: "No job selected",
+        variant: "destructive"
+      });
+      return;
+    }
+
     const { error } = await supabase
       .from('job_requests')
       .insert({
         job_id: selectedJobForCandidates,
         student_id: studentId,
-        employer_id: user.id,
         status: 'pending',
         message: 'We would like to offer you this position based on your skills match.'
       });
 
     if (error) {
+      console.error('Error sending job request:', error);
       toast({
         title: "Error",
         description: "Failed to send job request",
@@ -338,7 +347,7 @@ const EmployerDashboard: React.FC<EmployerDashboardProps> = ({ user, onSignOut }
           <div className="flex justify-between items-center h-16">
             <div className="flex items-center">
               <div className="text-2xl font-bold text-blue-600">🤝</div>
-              <h1 className="text-xl font-bold ml-2 text-blue-600">Udyoga Mitra</h1>
+              <h1 className="text-xl font-bold ml-2 text-blue-600">Udyoga Mitra - Recruiter</h1>
             </div>
             <Button variant="outline" onClick={onSignOut}>
               Sign Out
@@ -548,6 +557,7 @@ const EmployerDashboard: React.FC<EmployerDashboardProps> = ({ user, onSignOut }
                       <div className="flex-1">
                         <h3 className="font-semibold">{request.profiles.full_name}</h3>
                         <p className="text-sm text-gray-600">Phone: {request.profiles.phone_number}</p>
+                        <p className="text-sm text-gray-600">Job: {request.jobs.title}</p>
                         <p className="text-sm text-gray-600 mt-1">Applied on: {new Date(request.created_at).toLocaleDateString()}</p>
                         <p className="text-sm mt-2"><strong>Message:</strong> {request.message}</p>
                         <Badge 
